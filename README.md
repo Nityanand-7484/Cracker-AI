@@ -29,51 +29,16 @@ The architecture is built around a **custom Node.js WebSocket server** that acts
 ### Core
 - 🎙️ **Real-Time Speech-to-Text** — Persistent WebSocket relay to Deepgram; `interim_results` for sub-second transcription with automatic silence detection
 - 🧠 **AI Answer Generation** — Streams GPT-4o responses via Server-Sent Events (SSE); provider-agnostic via `src/lib/ai/providers.ts` (swap OpenAI / Groq / any OpenAI-compatible endpoint)
-- 📄 **RAG over Personal Documents** — Uploads parsed to `pdf-parse` / `mammoth`, chunked, embedded via OpenAI `text-embedding-3-small`, stored in Firestore with native `findNearest` vector search
+- 📄 **RAG over Personal Documents** — Uploads parsed via `pdf-parse` / `mammoth`, chunked, embedded via OpenAI `text-embedding-3-small`, stored in Firestore with native `findNearest` vector search
 - 🎭 **Mock Interview Mode** — Full AI-driven mock interviewer with question generation, follow-up logic, and session scoring
 - 🌐 **Real-Time Translation** — On-the-fly question/answer translation via `/api/translate`
 
 ### Platform
 - 💳 **SaaS Billing** — Razorpay-integrated Free / Pro / Team tiers with usage metering and webhook lifecycle management
 - 🛡️ **Admin Dashboard** — Internal route (`/admin`) with system health monitoring, user management, and usage analytics
-- 🖥️ **Electron Desktop App** — Transparent, always-on-top frameless window at `/desktop`; communicates with the web app over localhost
-- 📊 **Usage Tracking** — Per-user session credits tracked in Firestore with rate limiting (`src/lib/rate-limit.ts`)
-- 🔐 **Auth** — Clerk-first authentication with Firebase Auth fallback; JWT verification handled in `server.js` and `src/middleware.ts`
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      Browser / Electron                  │
-│  ┌──────────────┐   WebSocket    ┌────────────────────┐  │
-│  │  Live Session │◄─────────────►│   server.js (WSS)  │  │
-│  │  (React + STT)│               │  Deepgram Relay    │  │
-│  └──────────────┘                └────────┬───────────┘  │
-│                                           │              │
-│  ┌───────────────────────────────────────▼────────────┐  │
-│  │              Next.js API Routes (App Router)        │  │
-│  │  /api/ai  /api/documents  /api/billing  /api/auth  │  │
-│  └───────────────────────────────────────┬────────────┘  │
-│                                          │               │
-│            ┌─────────────────────────────▼─────────┐     │
-│            │           Firebase Firestore           │     │
-│            │  users / sessions / documents / usage  │     │
-│            │  Vector Search (findNearest embeddings)│     │
-│            └───────────────────────────────────────┘     │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Key Design Decisions
-
-| Decision | Rationale |
-|---|---|
-| Custom `server.js` instead of `next start` | WebSocket upgrade handling requires access to the raw `http.Server` instance — not possible with Next.js standalone server |
-| Firestore Vector Search over Pinecone/Weaviate | Zero extra infrastructure; native `findNearest` on the existing Firestore collection reduces ops complexity |
-| Provider-agnostic AI layer (`providers.ts`) | Swap LLM providers without touching business logic; Groq available as a low-latency fallback |
-| Clerk + Firebase Auth dual-layer | Clerk handles OAuth/social login UX; Firebase Auth session cookies enable WebSocket authentication without re-implementing OAuth |
-| Electron over browser extension | Extensions require review cycles and content policy compliance; Electron ships immediately with full system-level access |
+- 🖥️ **Electron Desktop App** — Transparent, always-on-top frameless window; communicates with the web app over localhost
+- 📊 **Usage Tracking** — Per-user session credits tracked in Firestore with rate limiting
+- 🔐 **Auth** — Clerk-first authentication with Firebase Auth fallback; JWT verification in middleware
 
 ---
 
@@ -83,7 +48,7 @@ The architecture is built around a **custom Node.js WebSocket server** that acts
 |---|---|---|
 | **Framework** | Next.js (App Router) | 14.x |
 | **Language** | TypeScript | 5.6 |
-| **Styling** | Tailwind CSS + Framer Motion | 3.x / 11.x |
+| **Styling** | Tailwind CSS + Framer Motion | 3.x / 14.x |
 | **Auth** | Clerk + Firebase Auth | 5.x |
 | **Database** | Firebase Firestore | 12.x |
 | **AI / LLM** | OpenAI GPT-4o (+ Groq fallback) | openai 7.x |
@@ -175,9 +140,10 @@ npm install
 
 ```bash
 cp .env.example .env
+# Fill in your credentials in .env
 ```
 
-Open `.env` and fill in all required values. See the [Environment Variables](#️-environment-variables) section for the full reference.
+See `.env.example` for the full list of required variables.
 
 ### 3. Firebase Setup
 
@@ -185,9 +151,9 @@ Open `.env` and fill in all required values. See the [Environment Variables](#�
 2. Enable **Firestore Database** (Native mode)
 3. Enable **Authentication** → Email/Password + Google
 4. Go to **Project Settings → Service Accounts → Generate new private key**
-5. Paste the values into `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` in your `.env`
+5. Paste the values into your `.env` file
 
-> **Vector Search Note:** The `documents` collection requires the `embedding` field to be indexed as a vector field in Firestore. This is handled automatically by the upload route (`/api/documents`), but ensure your Firebase project is on the **Blaze (pay-as-you-go) plan**, as vector search requires it.
+> **Vector Search Note:** The `documents` collection uses Firestore's native `findNearest` for vector search. Your Firebase project must be on the **Blaze (pay-as-you-go) plan** for this feature.
 
 ### 4. Razorpay Setup
 
@@ -210,59 +176,6 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## ⚙️ Environment Variables
-
-Copy `.env.example` to `.env`. **Never commit `.env` to version control.**
-
-```env
-# ── App ──────────────────────────────────────────────
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-NODE_ENV=development
-
-# ── Clerk Authentication ─────────────────────────────
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
-CLERK_SECRET_KEY=sk_test_...
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-
-# ── Firebase Client (Public) ─────────────────────────
-NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-
-# ── Firebase Admin (Server-only, NEVER expose) ───────
-FIREBASE_PROJECT_ID=your_project_id
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk@your_project.iam.gserviceaccount.com
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-
-# ── AI Providers ─────────────────────────────────────
-OPENAI_API_KEY=sk-...
-GROQ_API_KEY=gsk_...
-AI_PROVIDER=openai                # "openai" | "groq"
-
-# ── Speech-to-Text ───────────────────────────────────
-DEEPGRAM_API_KEY=your_deepgram_key
-NEXT_PUBLIC_SPEECH_PROVIDER=deepgram   # "deepgram" | "mock"
-
-# ── Payments ─────────────────────────────────────────
-NEXT_PUBLIC_RAZORPAY_KEY_ID=rzp_test_...
-RAZORPAY_KEY_ID=rzp_test_...
-RAZORPAY_KEY_SECRET=your_secret
-RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
-
-# ── Database ─────────────────────────────────────────
-DATABASE_URL=your_database_url
-
-# ── Auth ─────────────────────────────────────────────
-NEXTAUTH_SECRET=your_random_32char_secret
-NEXTAUTH_URL=http://localhost:3000
-```
-
----
-
 ## 🖥️ Desktop App (Electron)
 
 The Electron app renders the web app in a transparent, frameless, always-on-top window for use during screen-share interviews.
@@ -281,8 +194,6 @@ npm run desktop
 npm run desktop:build   # Builds for Windows (.exe installer)
 ```
 
-The desktop app communicates with the web app over `localhost:3000` and does not require a separate backend.
-
 ---
 
 ## 🧪 Testing
@@ -291,7 +202,7 @@ The desktop app communicates with the web app over `localhost:3000` and does not
 npm test
 ```
 
-Uses Node.js built-in test runner (`node:test`). Test files are located in `tests/` and follow the `*.test.js` naming convention.
+Uses Node.js built-in test runner (`node:test`). Test files live in `tests/` and follow the `*.test.js` naming convention.
 
 ---
 
@@ -302,43 +213,39 @@ Cracker AI **requires a persistent Node.js process** due to WebSocket connection
 ### Recommended: Render / Railway
 
 1. Push your code to GitHub (ensure `.env` is in `.gitignore`)
-2. Create a new **Web Service** on Render/Railway
+2. Create a new **Web Service**
 3. Set **Build Command:** `npm install && npm run build`
 4. Set **Start Command:** `npm run start`
 5. Add all environment variables via the platform dashboard
 6. Enable **Auto-Deploy** on push to `main`
 
-### Self-Hosted (VPS / Docker)
+### Self-Hosted (Docker)
 
 A `docker-compose.yml` is included for self-hosted deployments:
 
 ```bash
-# Set your env vars, then:
 docker-compose up -d
 ```
 
-> ⚠️ Ensure your hosting provider supports **persistent WebSocket connections** and does not enforce a 60-second request timeout (e.g., AWS API Gateway is not suitable without additional configuration).
+> ⚠️ Ensure your hosting provider supports **persistent WebSocket connections** and does not enforce a 60-second request timeout.
 
 ---
 
 ## 🔧 Troubleshooting
 
 **Admin dashboard shows 403**
-```
-POST /api/admin/init
-```
-Or manually set `role: "ADMIN"` on your `profiles` document in Firestore.
+Send `POST /api/admin/init`, or manually set `role: "ADMIN"` on your `profiles` document in Firestore.
 
 **WebSocket disconnects immediately**
-- Confirm `DEEPGRAM_API_KEY` is set: the server logs `✓` or `✗ MISSING` on startup
+- Confirm your Deepgram API key is correctly set in `.env`
 - Set `NEXT_PUBLIC_SPEECH_PROVIDER=mock` to run without a Deepgram key during development
 
-**`FIREBASE_PRIVATE_KEY` formatting error**
-- Ensure the key is wrapped in double quotes in `.env`
-- The `\n` newline characters must remain as literal `\n` (not actual newlines) in the `.env` file
+**Firebase private key formatting error**
+- Wrap the key in double quotes in `.env`
+- Keep `\n` as literal characters — do not use actual newlines
 
-**`TypeError: Cannot read properties of undefined (reading 'length')` in server.js**
-- Ensure `firebase-admin` v12+ is installed — the server uses modular `getApps()` imports, not legacy `admin.apps`
+**`TypeError` on `getApps()` in server.js**
+Ensure `firebase-admin` v12+ is installed — the server uses modular imports, not legacy `admin.apps` syntax.
 
 ---
 
@@ -355,7 +262,7 @@ Please ensure `npm run lint` passes before submitting a PR.
 
 ## 📄 License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License**.
 
 ---
 
