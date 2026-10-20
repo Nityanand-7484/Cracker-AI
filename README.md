@@ -34,36 +34,36 @@ The system is designed with a strict, unidirectional layered architecture. Commu
 
 ```mermaid
 flowchart TD
-    A([🌐 Next.js Web App\nReact / Browser]) -->|WebSocket upgrade| C
-    B([🖥️ Electron Desktop\nTransparent Overlay]) -->|localhost relay| C
+    A([Next.js Web App]) -->|WebSocket upgrade| C
+    B([Electron Desktop App]) -->|localhost relay| C
 
-    subgraph SERVER ["⚙️ Server Layer — server.js (Node.js HTTP + WSS)"]
-        C[WebSocket Server\nDeepgram Relay]
-        D[Next.js Request Handler\nApp Router]
+    subgraph SERVER ["Server Layer — server.js"]
+        C[WebSocket Server<br/>Deepgram Relay]
+        D[Next.js Request Handler<br/>App Router]
     end
 
-    C -->|Streams audio| E([🎙️ Deepgram API\nStreaming STT])
+    C -->|Streams audio| E([Deepgram API<br/>Streaming STT])
     E -->|Transcript chunks| C
     C --> D
 
-    D --> F[/api/ai\nSSE Answer Stream]
-    D --> G[/api/documents\nRAG + Embeddings]
-    D --> H[/api/billing\nRazorpay Webhooks]
-    D --> I[/api/auth\nClerk + JWT]
+    D --> F[/api/ai<br/>SSE Answer Stream]
+    D --> G[/api/documents<br/>RAG + Embeddings]
+    D --> H[/api/billing<br/>Razorpay Webhooks]
+    D --> I[/api/auth<br/>Clerk + JWT]
 
-    F -->|Prompt + context| J([🧠 OpenAI GPT-4o\nAnswer Generation])
-    G -->|Embed chunks| K([🔢 OpenAI Embeddings\ntext-embedding-3-small])
+    F -->|Prompt + context| J([OpenAI GPT-4o<br/>Answer Generation])
+    G -->|Embed chunks| K([OpenAI Embeddings<br/>text-embedding-3-small])
 
-    subgraph DB ["🗄️ Data Layer — Firebase Firestore"]
-        L[(users\nprofiles)]
-        M[(sessions\nhistory)]
-        N[(documents\nvector embeddings)]
-        O[(usage\ncredits)]
+    subgraph DB ["Data Layer — Firebase Firestore"]
+        L[(users<br/>profiles)]
+        M[(sessions<br/>history)]
+        N[(documents<br/>vector embeddings)]
+        O[(usage<br/>credits)]
     end
 
-    G <-->|findNearest\nvector search| N
+    G <-->|findNearest vector search| N
     F <-->|read context| M
-    I <-->|auth & roles| L
+    I <-->|auth and roles| L
     H <-->|credit metering| O
 
     style SERVER fill:#1a1a2e,stroke:#4e4e8a,color:#fff
@@ -76,7 +76,7 @@ flowchart TD
 |---|---|
 | Custom `server.js` over `next start` | WebSocket upgrade requires raw `http.Server` access — not possible with Next.js standalone |
 | Firestore Vector Search over Pinecone/Weaviate | Zero extra infrastructure; native `findNearest` on existing collection reduces ops complexity |
-| Provider-agnostic AI layer (`providers.ts`) | Swap LLM providers (OpenAI ↔ Groq) without touching business logic |
+| Provider-agnostic AI layer (`providers.ts`) | Swap LLM providers (OpenAI to Groq) without touching business logic |
 | Clerk + Firebase Auth dual-layer | Clerk handles OAuth UX; Firebase session cookies enable WebSocket authentication |
 | Electron over browser extension | No review cycles or content policy; ships immediately with full system-level access |
 
@@ -126,8 +126,8 @@ flowchart TD
 
 | Requirement | Version | Notes |
 |---|---|---|
-| Node.js | ≥ 20 | LTS recommended |
-| npm | ≥ 10 | Bundled with Node 20 |
+| Node.js | >= 20 | LTS recommended |
+| npm | >= 10 | Bundled with Node 20 |
 | Firebase Project | — | Firestore + Auth enabled |
 | OpenAI Account | — | GPT-4o + Embeddings access |
 | Deepgram Account | — | Streaming STT (12k min/month free tier) |
@@ -155,11 +155,11 @@ See `.env.example` for the full list of required variables.
 
 1. Create a project at [console.firebase.google.com](https://console.firebase.google.com)
 2. Enable **Firestore Database** (Native mode)
-3. Enable **Authentication** → Email/Password + Google
+3. Enable **Authentication** — Email/Password + Google
 4. Go to **Project Settings → Service Accounts → Generate new private key**
 5. Paste the values into your `.env` file
 
-> **Vector Search Note:** The `documents` collection uses Firestore's native `findNearest` for vector search. Your Firebase project must be on the **Blaze (pay-as-you-go) plan** for this feature.
+> **Vector Search Note:** The `documents` collection uses Firestore native `findNearest` for vector search. Your Firebase project must be on the **Blaze plan** for this feature.
 
 ### 4. Razorpay Setup
 
@@ -176,13 +176,13 @@ See `.env.example` for the full list of required variables.
 npm run dev
 ```
 
-> ⚠️ **Do not use `next dev`** — the dev server must be started via `node server.js` (aliased to `npm run dev`) to initialize the WebSocket server for Deepgram relay.
+> **Note:** Do not use `next dev` — the dev server must be started via `node server.js` (aliased to `npm run dev`) to initialize the WebSocket server for Deepgram relay.
 
 ---
 
 ## <div align="center">🖥️ Desktop App (Electron)</div>
 
-The Electron app renders the web app in a transparent, frameless, always-on-top window — perfect for use during screen-share interviews without detection.
+The Electron app renders the web app in a transparent, frameless, always-on-top window — perfect for use during screen-share interviews.
 
 ```bash
 # Terminal 1 — Web server must be running first
@@ -231,7 +231,7 @@ A `docker-compose.yml` is included for self-hosted deployments:
 docker-compose up -d
 ```
 
-> ⚠️ Ensure your hosting provider supports **persistent WebSocket connections** and does not enforce a 60-second request timeout.
+> Ensure your hosting provider supports **persistent WebSocket connections** and does not enforce a 60-second request timeout.
 
 ---
 
@@ -248,7 +248,7 @@ Send `POST /api/admin/init`, or manually set `role: "ADMIN"` on your `profiles` 
 - Wrap the key in double quotes in `.env`
 - Keep `\n` as literal characters — do not use actual newlines
 
-**`TypeError` on `getApps()` in server.js**
+**TypeError on `getApps()` in server.js**
 Ensure `firebase-admin` v12+ is installed — the server uses modular imports, not legacy `admin.apps` syntax.
 
 ---
