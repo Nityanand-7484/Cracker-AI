@@ -1,159 +1,134 @@
 <div align="center">
 
-# 🤖 Cracker AI
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,12,20&height=200&section=header&text=Cracker%20AI&fontSize=60&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=Real-Time%20AI%20Interview%20Assistant&descSize=20&descAlignY=60" alt="Cracker AI banner" width="100%" />
 
-### Real-Time AI Interview Assistant
+<a href="https://github.com/Nityanand-7484/cracker-ai">
+  <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=18&duration=3000&pause=800&color=FF7700&center=true&vCenter=true&width=520&height=40&lines=Live+voice+to+instant+answers;Streaming+speech-to-text;GPT-4o+answers+from+your+resume;RAG+over+your+own+documents;Transparent+Electron+overlay" alt="Typing animation" />
+</a>
 
-*Ace every interview with live AI coaching powered by voice, RAG, and your own documents*
+<br/>
 
-[![Node.js](https://img.shields.io/badge/Node.js-v20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
+[![Node.js](https://img.shields.io/badge/Node.js-v20+-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-14-000000?logo=next.js&logoColor=white)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Firebase](https://img.shields.io/badge/Firebase-Firestore-FF6F00?logo=firebase&logoColor=white)](https://firebase.google.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Electron](https://img.shields.io/badge/Electron-Desktop-47848F?logo=electron&logoColor=white)](https://www.electronjs.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](https://opensource.org/licenses/MIT)
 
-<br/><br/>
+<br/>
 
-<img src="preview.png" alt="Cracker AI Platform Preview" width="100%" />
+<img src="preview.png" alt="Cracker AI platform preview" width="100%" />
+
+<br/>
+
+[Overview](#-overview) · [How It Works](#-how-it-works) · [Architecture](#-architecture) · [Features](#-features)
+<br/>
+[Tech Stack](#-tech-stack) · [Getting Started](#-getting-started) · [Desktop App](#-desktop-app-electron) · [Deploy](#-deployment)
 
 </div>
 
 ---
 
-## <div align="center">📖 Overview</div>
+## 📖 Overview
 
-Cracker AI is a production-grade SaaS application designed to provide sub-second, real-time AI assistance during live technical interviews. By integrating streaming speech-to-text, context-aware large language models, and Retrieval-Augmented Generation (RAG) directly into an undetectable HUD, it surfaces authoritative technical answers tailored to the user's specific resume and verified projects.
+**Cracker AI** is a production-grade SaaS app that gives you sub-second, real-time AI help during live technical interviews.
 
-The architecture centers around a custom Node.js WebSocket gateway that acts as a secure duplex bridge between the client and Deepgram's streaming speech recognition API. An Electron desktop client provides a transparent, frameless, hardware-accelerated overlay widget ensuring an unobtrusive user experience.
+It puts three things in one flow:
+
+- 🎙️ **Streaming speech-to-text** to hear the question as it's asked
+- 🧠 **Context-aware LLM answers** streamed token by token
+- 📄 **RAG** so answers are based on *your* resume and *your* verified projects
+
+Answers show up in a transparent HUD overlay, so you never leave your interview window.
+
+Under the hood, a custom **Node.js WebSocket gateway** is a secure two-way bridge between the client and Deepgram's streaming speech API. An **Electron** desktop client wraps it all in a frameless, hardware-accelerated overlay.
 
 ---
 
-## <div align="center">🏗️ Architecture Overview</div>
+## 🔄 How It Works
 
-The system is designed with a strict, unidirectional layered architecture. Communication between layers is decoupled using WebSockets and Firestore, ensuring fault-isolation, modularity, and high testability.
+<div align="center">
+  <img src="docs/how-it-works.svg" alt="How Cracker AI works: from spoken question to live answer in 7 steps" width="520" />
+</div>
 
-```mermaid
-flowchart TD
-    subgraph CLIENT ["Client Layer"]
-        A["Next.js Web App<br/>React / Browser Client"]
-        B["Electron Desktop App<br/>Transparent Overlay"]
-    end
+---
 
-    subgraph SERVER ["Server Layer — server.js"]
-        C["WebSocket Relay<br/>Deepgram Audio Stream"]
-        D["Next.js Request Handler<br/>App Router API Engine"]
-    end
+## 🏗️ Architecture
 
-    subgraph AI_LAYER ["AI & Speech Engine"]
-        E["Deepgram API<br/>Streaming Speech-to-Text"]
-        F["OpenAI GPT-4o<br/>SSE Real-time Answer Stream"]
-        G["OpenAI Embeddings<br/>text-embedding-3-small"]
-    end
+The system is a strict, layered design. Layers talk through WebSockets and Firestore, so failures stay isolated, code stays modular, and everything is easy to test.
 
-    subgraph DATA_LAYER ["Data Layer — Firebase Firestore"]
-        H[("User Profiles & Roles")]
-        I[("Interview Sessions & History")]
-        J[("Document Chunks & Vector Index")]
-        K[("Credit Metering & Usage Limits")]
-    end
+<div align="center">
+  <img src="docs/architecture.svg" alt="Cracker AI architecture: client, server, AI engine, data layer, auth and billing" width="520" />
+</div>
 
-    subgraph AUTH_BILLING ["Authentication & Billing"]
-        L["Clerk Auth<br/>JWT & Session Management"]
-        M["Razorpay<br/>Subscription Lifecycle"]
-    end
+### 🧭 Key Design Decisions
 
-    A -->|"WebSocket Upgrade"| C
-    B -->|"Localhost Relay"| C
-    A -->|"HTTP API Requests"| D
+- **Custom `server.js` gateway.** WebSocket upgrades need raw access to the underlying `http.Server`, which serverless runtimes don't allow.
+- **Firestore native vector search.** No separate vector DB (Pinecone / Weaviate) to run. Firestore's `findNearest` does the job.
+- **Provider-agnostic LLM layer.** `providers.ts` lets you fall back between OpenAI GPT-4o and other inference endpoints without touching app code.
+- **Dual-layer authentication.** Clerk handles sign-in flows, while Firebase session tokens secure the real-time WebSocket channel.
+- **Electron native overlay.** A system-wide, frameless, click-through overlay that a browser extension sandbox can't give you.
 
-    C <-->|"Bidirectional Audio"| E
-    C -->|"Transcript Chunks"| D
+---
 
-    D -->|"Stream Prompts + Context"| F
-    D -->|"Vectorize Document Chunks"| G
+## ✨ Features
 
-    D <-->|"findNearest Vector Search"| J
-    D <-->|"Persist Sessions"| I
-    D <-->|"Check Credits"| K
-    D <-->|"Validate Identity"| H
+### Core
 
-    D <-->|"Session Verification"| L
-    D <-->|"Payment Webhooks"| M
+- 🎙️ **Streaming Speech-to-Text.** Persistent WebSocket relay to Deepgram with interim results and automatic endpointing.
+- 🧠 **Context-Aware Answers.** GPT-4o answers over Server-Sent Events (SSE), with real-time prompt optimization.
+- 📄 **RAG Document Engine.** Parses PDF (`pdf-parse`) and DOCX (`mammoth`), chunks semantically, embeds with `text-embedding-3-small`, and searches with Firestore `findNearest`.
+- 🎭 **Mock Interviews.** AI-driven technical mock interviews with question generation, progressive evaluation, and session scoring.
+- 🌐 **Real-Time Translation.** Multi-language transcription and translation pipeline.
 
-    style CLIENT fill:#161b22,stroke:#30363d,stroke-width:2px,color:#f0f6fc
-    style SERVER fill:#161b22,stroke:#ff7700,stroke-width:2px,color:#f0f6fc
-    style AI_LAYER fill:#161b22,stroke:#58a6ff,stroke-width:2px,color:#f0f6fc
-    style DATA_LAYER fill:#161b22,stroke:#3fb950,stroke-width:2px,color:#f0f6fc
-    style AUTH_BILLING fill:#161b22,stroke:#bc8cff,stroke-width:2px,color:#f0f6fc
-```
+### Platform
 
-### <div align="center">Key Design Decisions</div>
+- 💳 **SaaS Billing.** Multi-tier subscriptions with Razorpay, webhooks, and automatic credit top-ups.
+- 🛡️ **Admin Dashboard.** Role-based access, system health, token usage monitoring, user roles, and credit allocation.
+- 🖥️ **Electron Desktop Client.** Hardware-accelerated, transparent, frameless window that talks to the web platform.
+- 📊 **Usage Tracking & Rate Limits.** Real-time token and credit tracking with granular quotas.
+- 🔐 **Secure Auth Flow.** Clerk authentication, verified with the Firebase Admin SDK on API routes and WebSockets.
 
-| Decision | Rationale |
+---
+
+## 🛠️ Tech Stack
+
+<div align="center">
+  <img src="https://skillicons.dev/icons?i=nextjs,ts,react,tailwind,nodejs,firebase,electron,docker&theme=dark" alt="Tech stack icons" />
+</div>
+
+<br/>
+
+| Layer | Technology |
 |---|---|
-| **Custom `server.js` Gateway** | WebSocket protocol upgrades require raw access to the underlying `http.Server`, impossible on serverless function runtimes. |
-| **Firestore Native Vector Search** | Eliminates external vector DB infrastructure (Pinecone/Weaviate) by utilizing native `findNearest` vector indices directly inside Firestore. |
-| **Provider-Agnostic LLM Layer** | Abstracted AI pipeline via `providers.ts` allowing dynamic fallback between OpenAI GPT-4o and alternative inference endpoints without altering application code. |
-| **Dual-Layer Authentication** | Clerk provides modern authentication flows while Firebase session tokens authenticate real-time WebSocket communication channels. |
-| **Electron Native Window Overlay** | Bypasses browser extension permission sandboxes to offer system-wide frameless, click-through overlay capabilities. |
+| **Framework** | Next.js 14 (App Router) |
+| **Language** | TypeScript 5.6 |
+| **Styling** | Tailwind CSS 3 + Framer Motion 14 |
+| **Auth** | Clerk + Firebase Auth 5 |
+| **Database** | Firestore 12 (native vector search) |
+| **AI / LLM** | OpenAI GPT-4o (+ Groq fallback), openai 7 |
+| **Speech-to-Text** | Deepgram streaming, @deepgram/sdk 5 |
+| **Embeddings** | OpenAI `text-embedding-3-small` |
+| **Payments** | Razorpay SDK 2 |
+| **Desktop** | Electron |
+| **WebSocket** | `ws` 8 |
+| **Validation** | Zod 3 |
+| **Doc Parsers** | `pdf-parse`, `mammoth` |
 
 ---
 
-## <div align="center">✨ Features</div>
+## 🚀 Getting Started
 
-### <div align="center">Core Capabilities</div>
+### Prerequisites
 
-- 🎙️ **Streaming Speech-to-Text** — Persistent WebSocket relay to Deepgram with interim result streaming for ultra-low latency transcription and automatic endpointing.
-- 🧠 **Context-Aware Answer Synthesis** — Server-Sent Events (SSE) streaming answers generated via GPT-4o with real-time prompt optimization.
-- 📄 **RAG Document Engine** — Automated parsing for PDF (`pdf-parse`) and DOCX (`mammoth`), semantic chunking, embedding generation via `text-embedding-3-small`, and similarity search with Firestore `findNearest`.
-- 🎭 **Interactive Mock Interviews** — AI-driven technical mock interview simulator with question synthesis, progressive evaluation, and session scoring.
-- 🌐 **Real-Time Translation** — Real-time multi-language transcription and translation pipeline.
+- **Node.js** 20+ (LTS recommended) and **npm** 10+
+- **Firebase project** with Firestore (Native Mode) and Auth enabled
+- **OpenAI** account with GPT-4o and Embeddings access
+- **Deepgram** account with streaming STT enabled
+- **Clerk** account with an auth app configured
+- **Razorpay** account (test or production keys)
 
-### <div align="center">Platform & Infrastructure</div>
-
-- 💳 **SaaS Billing System** — Multi-tiered subscription management integrated with Razorpay, webhooks, and automatic credit replenishment.
-- 🛡️ **Role-Based Admin Dashboard** — System health telemetry, token usage monitoring, user role management, and credit allocation.
-- 🖥️ **Electron Desktop Client** — Hardware-accelerated, transparent, frameless window communicating with the web platform.
-- 📊 **Usage Tracking & Rate Limiting** — Real-time token and credit consumption tracking with granular quotas.
-- 🔐 **Secure Auth Flow** — Clerk authentication with Firebase Admin SDK verification on API routes and WebSockets.
-
----
-
-## <div align="center">🛠️ Tech Stack</div>
-
-| Layer | Technology | Version |
-|---|---|---|
-| **Framework** | Next.js (App Router) | 14.x |
-| **Language** | TypeScript | 5.6 |
-| **Styling** | Tailwind CSS + Framer Motion | 3.x / 14.x |
-| **Authentication** | Clerk + Firebase Auth | 5.x |
-| **Database** | Firebase Firestore (Native Vector Search) | 12.x |
-| **AI / LLM** | OpenAI GPT-4o (+ Groq fallback) | openai 7.x |
-| **Speech-to-Text** | Deepgram Streaming WebSocket SDK | @deepgram/sdk 5.x |
-| **Embeddings** | OpenAI text-embedding-3-small | — |
-| **Payments** | Razorpay SDK | 2.x |
-| **Desktop Wrapper** | Electron | — |
-| **WebSocket** | ws library | 8.x |
-| **Validation** | Zod | 3.x |
-| **Document Parsers** | pdf-parse, mammoth (DOCX) | — |
-
----
-
-## <div align="center">🚀 Getting Started</div>
-
-### <div align="center">Prerequisites</div>
-
-| Dependency | Minimum Version | Notes |
-|---|---|---|
-| Node.js | >= 20.x | LTS release recommended |
-| npm | >= 10.x | Bundled with Node 20 |
-| Firebase Project | — | Firestore Native Mode + Auth enabled |
-| OpenAI Account | — | Access to GPT-4o and Embeddings |
-| Deepgram Account | — | Streaming STT enabled |
-| Clerk Account | — | Authentication application configured |
-| Razorpay Account | — | Test mode or production keys |
-
-### <div align="center">1. Clone & Install</div>
+### 1️⃣ Clone & Install
 
 ```bash
 git clone https://github.com/Nityanand-7484/cracker-ai.git
@@ -161,53 +136,68 @@ cd cracker-ai
 npm install
 ```
 
-### <div align="center">2. Configure Environment</div>
+### 2️⃣ Configure Environment
 
 ```bash
 cp .env.example .env
-# Configure your API credentials inside .env
+# Fill in your API credentials inside .env
 ```
 
-Refer to `.env.example` for the full reference of application configuration variables.
+See `.env.example` for the full list of variables.
 
-### <div align="center">3. Firebase Setup</div>
+<details>
+<summary><b>3️⃣ Firebase Setup</b></summary>
 
-1. Navigate to the Firebase Console and configure a new project.
+<br/>
+
+1. Create a new project in the Firebase Console.
 2. Enable **Firestore Database** in Native Mode.
 3. Enable **Authentication** providers (Email/Password and Google).
-4. In **Project Settings → Service Accounts**, generate a new private key and export credentials to your `.env`.
+4. Go to **Project Settings → Service Accounts**, generate a new private key, and add the credentials to your `.env`.
 
-> **Vector Search Note:** The `documents` collection relies on Firestore's native `findNearest` vector index capability (available on the Blaze plan).
+> [!NOTE]
+> The `documents` collection uses Firestore's native `findNearest` vector index, which needs the **Blaze plan**.
 
-### <div align="center">4. Razorpay Setup</div>
+</details>
 
-1. In the Razorpay Dashboard, generate API keys.
-2. Configure plans for **Pro** and **Team** subscriptions.
-3. Configure the webhook endpoint to capture `payment.captured`, `subscription.cancelled`, and `subscription.completed` events.
+<details>
+<summary><b>4️⃣ Razorpay Setup</b></summary>
 
-### <div align="center">5. Run Locally</div>
+<br/>
+
+1. In the Razorpay Dashboard, generate your API keys.
+2. Create plans for **Pro** and **Team** subscriptions.
+3. Point the webhook endpoint at your server and enable these events:
+   - `payment.captured`
+   - `subscription.cancelled`
+   - `subscription.completed`
+
+</details>
+
+### 5️⃣ Run Locally
 
 ```bash
 npm run dev
 ```
 
-> **Note:** The application server must be launched via `node server.js` (aliased to `npm run dev`) to establish the WebSocket relay layer alongside Next.js.
+> [!IMPORTANT]
+> The app must be started with `node server.js` (already aliased to `npm run dev`). This starts the WebSocket relay next to Next.js.
 
 ---
 
-## <div align="center">🖥️ Desktop App (Electron)</div>
+## 🖥️ Desktop App (Electron)
 
-The Electron client runs a lightweight frameless transparent window over your screen:
+The Electron client opens a lightweight, frameless, transparent window over your screen.
 
 ```bash
-# Terminal 1 — Start web and WebSocket gateway
+# Terminal 1: web app + WebSocket gateway
 npm run dev
 
-# Terminal 2 — Launch Electron client
+# Terminal 2: Electron client
 npm run desktop
 ```
 
-**Build installer package:**
+Build an installer:
 
 ```bash
 npm run desktop:build
@@ -215,30 +205,28 @@ npm run desktop:build
 
 ---
 
-## <div align="center">🧪 Testing</div>
+## 🧪 Testing
 
 ```bash
 npm test
 ```
 
-Executes test suites using the native Node.js test runner (`node:test`). Tests are structured under the `tests/` directory following the `*.test.js` pattern.
+Tests run on the native Node.js test runner (`node:test`) and live in `tests/` using the `*.test.js` pattern.
 
 ---
 
-## <div align="center">📦 Deployment</div>
+## 📦 Deployment
 
-Cracker AI requires a persistent Node.js runtime to maintain persistent WebSocket streams.
+Cracker AI needs a **persistent Node.js runtime** to keep its WebSocket streams alive, so serverless platforms won't work.
 
-### <div align="center">Recommended: Render / Railway</div>
+### ☁️ Render / Railway (recommended)
 
-1. Connect your repository to your cloud deployment platform.
-2. **Build Command:** `npm install && npm run build`
-3. **Start Command:** `npm run start`
-4. Set required environment variables via the platform environment dashboard.
+1. Connect your repository to the platform.
+2. **Build command:** `npm install && npm run build`
+3. **Start command:** `npm run start`
+4. Add all required environment variables in the dashboard.
 
-### <div align="center">Self-Hosted (Docker)</div>
-
-A `docker-compose.yml` specification is provided for containerized deployments:
+### 🐳 Self-hosted (Docker)
 
 ```bash
 docker-compose up -d
@@ -246,32 +234,65 @@ docker-compose up -d
 
 ---
 
-## <div align="center">🔧 Troubleshooting</div>
+## 🔧 Troubleshooting
 
-| Issue | Resolution |
-|---|---|
-| **Admin Route returns 403** | Execute `POST /api/admin/init` or assign `role: "ADMIN"` in the Firestore profile document. |
-| **WebSocket disconnects on connect** | Verify Deepgram API key configuration or specify `NEXT_PUBLIC_SPEECH_PROVIDER=mock` for mock audio testing. |
-| **Firebase private key format error** | Ensure the private key is enclosed in quotes with literal `\n` linebreaks preserved. |
-| **Module resolution errors in server.js** | Ensure `firebase-admin` 12+ is installed using standard modular imports. |
+<details>
+<summary><b>Admin route returns 403</b></summary>
+
+<br/>
+
+Run `POST /api/admin/init`, or set `role: "ADMIN"` on your profile document in Firestore.
+
+</details>
+
+<details>
+<summary><b>WebSocket disconnects right after connecting</b></summary>
+
+<br/>
+
+Check your Deepgram API key. To test without real audio, set `NEXT_PUBLIC_SPEECH_PROVIDER=mock`.
+
+</details>
+
+<details>
+<summary><b>Firebase private key format error</b></summary>
+
+<br/>
+
+Wrap the private key in quotes and keep the literal `\n` line breaks.
+
+</details>
+
+<details>
+<summary><b>Module resolution errors in server.js</b></summary>
+
+<br/>
+
+Make sure `firebase-admin` 12+ is installed and you're using the standard modular imports.
+
+</details>
 
 ---
 
-## <div align="center">🤝 Contributing</div>
+## 🤝 Contributing
 
 1. Fork the repository.
-2. Create your feature branch (`git checkout -b feat/my-feature`).
-3. Commit your changes (`git commit -m "feat: implement feature"`).
-4. Push to the branch and open a Pull Request.
+2. Create a feature branch: `git checkout -b feat/my-feature`
+3. Commit your changes: `git commit -m "feat: implement feature"`
+4. Push the branch and open a Pull Request.
 
 ---
 
-## <div align="center">📄 License</div>
+## 📄 License
 
 Distributed under the **MIT License**.
 
----
-
 <div align="center">
-Built with ❤️ by <a href="https://github.com/Nityanand-7484">Nityanand Kumar</a>
+
+<br/>
+
+**Built with ❤️ by [Nityanand Kumar](https://github.com/Nityanand-7484)**
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,12,20&height=100&section=footer" alt="footer wave" width="100%" />
+
 </div>
