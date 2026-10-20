@@ -12,11 +12,15 @@
 [![Firebase](https://img.shields.io/badge/Firebase-Firestore-FF6F00?logo=firebase&logoColor=white)](https://firebase.google.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+<br/>
+
+![Cracker AI Preview](screenshots/preview.png)
+
 </div>
 
 ---
 
-## 📖 Overview
+## <div align="center">📖 Overview</div>
 
 Cracker AI is a production-grade SaaS application that provides real-time AI coaching during live job interviews. It combines **streaming speech-to-text**, **large language models**, and **Retrieval-Augmented Generation (RAG)** to instantly surface relevant answers drawn from the user's own resume and documents — all while the interview is happening.
 
@@ -24,59 +28,53 @@ The core is built around a **custom Node.js WebSocket server** that acts as a se
 
 ---
 
-## 🏗️ Architecture
+## <div align="center">🏗️ Architecture Overview</div>
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                        CLIENT LAYER                              │
-│                                                                  │
-│   ┌─────────────────────┐        ┌──────────────────────────┐   │
-│   │   Next.js Web App   │        │   Electron Desktop App   │   │
-│   │  (React / Browser)  │        │  (Transparent Overlay)   │   │
-│   └──────────┬──────────┘        └────────────┬─────────────┘   │
-│              │  WebSocket                      │  localhost       │
-└──────────────┼─────────────────────────────────┼─────────────────┘
-               │                                 │
-┌──────────────▼─────────────────────────────────▼─────────────────┐
-│                        SERVER LAYER                               │
-│                                                                   │
-│   ┌────────────────────────────────────────────────────────────┐  │
-│   │              server.js  (Node.js HTTP + WSS)               │  │
-│   │   ┌──────────────────┐     ┌──────────────────────────┐   │  │
-│   │   │  Deepgram Relay  │     │   Next.js Request Handler │   │  │
-│   │   │  (WebSocket WSS) │     │   (App Router API Routes) │   │  │
-│   │   └──────────────────┘     └──────────────────────────┘   │  │
-│   └────────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│   ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐  │
-│   │  /api/ai   │  │ /api/docs  │  │/api/billing│  │/api/auth │  │
-│   │  SSE Stream│  │ RAG + Embed│  │  Razorpay  │  │  Clerk   │  │
-│   └────────────┘  └────────────┘  └────────────┘  └──────────┘  │
-└───────────────────────────────────┬───────────────────────────────┘
-                                    │
-┌───────────────────────────────────▼───────────────────────────────┐
-│                        DATA LAYER                                  │
-│                                                                    │
-│   ┌──────────────────────────────────────────────────────────┐    │
-│   │                   Firebase Firestore                      │    │
-│   │   ┌────────────┐  ┌────────────┐  ┌────────────────────┐ │    │
-│   │   │   users    │  │  sessions  │  │     documents      │ │    │
-│   │   │  profiles  │  │  history   │  │ (vector embeddings)│ │    │
-│   │   └────────────┘  └────────────┘  └────────────────────┘ │    │
-│   └──────────────────────────────────────────────────────────┘    │
-│                                                                    │
-│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐     │
-│   │  OpenAI API  │   │ Deepgram API │   │   Razorpay API   │     │
-│   │ GPT-4o + Emb │   │ Streaming STT│   │  Payments/Billing│     │
-│   └──────────────┘   └──────────────┘   └──────────────────┘     │
-└────────────────────────────────────────────────────────────────────┘
+The system is designed with a strict, unidirectional layered architecture. Communication between layers is decoupled using WebSockets and Firestore, ensuring fault-isolation, modularity, and high testability.
+
+```mermaid
+flowchart TD
+    A([🌐 Next.js Web App\nReact / Browser]) -->|WebSocket upgrade| C
+    B([🖥️ Electron Desktop\nTransparent Overlay]) -->|localhost relay| C
+
+    subgraph SERVER ["⚙️ Server Layer — server.js (Node.js HTTP + WSS)"]
+        C[WebSocket Server\nDeepgram Relay]
+        D[Next.js Request Handler\nApp Router]
+    end
+
+    C -->|Streams audio| E([🎙️ Deepgram API\nStreaming STT])
+    E -->|Transcript chunks| C
+    C --> D
+
+    D --> F[/api/ai\nSSE Answer Stream]
+    D --> G[/api/documents\nRAG + Embeddings]
+    D --> H[/api/billing\nRazorpay Webhooks]
+    D --> I[/api/auth\nClerk + JWT]
+
+    F -->|Prompt + context| J([🧠 OpenAI GPT-4o\nAnswer Generation])
+    G -->|Embed chunks| K([🔢 OpenAI Embeddings\ntext-embedding-3-small])
+
+    subgraph DB ["🗄️ Data Layer — Firebase Firestore"]
+        L[(users\nprofiles)]
+        M[(sessions\nhistory)]
+        N[(documents\nvector embeddings)]
+        O[(usage\ncredits)]
+    end
+
+    G <-->|findNearest\nvector search| N
+    F <-->|read context| M
+    I <-->|auth & roles| L
+    H <-->|credit metering| O
+
+    style SERVER fill:#1a1a2e,stroke:#4e4e8a,color:#fff
+    style DB fill:#1a2e1a,stroke:#4e8a4e,color:#fff
 ```
 
-### Key Design Decisions
+### <div align="center">Key Design Decisions</div>
 
 | Decision | Rationale |
 |---|---|
-| Custom `server.js` over `next start` | WebSocket upgrade requires access to raw `http.Server` — not possible with Next.js standalone |
+| Custom `server.js` over `next start` | WebSocket upgrade requires raw `http.Server` access — not possible with Next.js standalone |
 | Firestore Vector Search over Pinecone/Weaviate | Zero extra infrastructure; native `findNearest` on existing collection reduces ops complexity |
 | Provider-agnostic AI layer (`providers.ts`) | Swap LLM providers (OpenAI ↔ Groq) without touching business logic |
 | Clerk + Firebase Auth dual-layer | Clerk handles OAuth UX; Firebase session cookies enable WebSocket authentication |
@@ -84,7 +82,7 @@ The core is built around a **custom Node.js WebSocket server** that acts as a se
 
 ---
 
-## ✨ Features
+## <div align="center">✨ Features</div>
 
 ### Core
 - 🎙️ **Real-Time Speech-to-Text** — Persistent WebSocket relay to Deepgram with `interim_results` for sub-second transcription and automatic silence detection
@@ -102,7 +100,7 @@ The core is built around a **custom Node.js WebSocket server** that acts as a se
 
 ---
 
-## 🛠️ Tech Stack
+## <div align="center">🛠️ Tech Stack</div>
 
 | Layer | Technology | Version |
 |---|---|---|
@@ -122,7 +120,7 @@ The core is built around a **custom Node.js WebSocket server** that acts as a se
 
 ---
 
-## 🚀 Getting Started
+## <div align="center">🚀 Getting Started</div>
 
 ### Prerequisites
 
@@ -182,9 +180,9 @@ npm run dev
 
 ---
 
-## 🖥️ Desktop App (Electron)
+## <div align="center">🖥️ Desktop App (Electron)</div>
 
-The Electron app renders the web app in a transparent, frameless, always-on-top window for use during screen-share interviews.
+The Electron app renders the web app in a transparent, frameless, always-on-top window — perfect for use during screen-share interviews without detection.
 
 ```bash
 # Terminal 1 — Web server must be running first
@@ -202,7 +200,7 @@ npm run desktop:build   # Builds for Windows (.exe installer)
 
 ---
 
-## 🧪 Testing
+## <div align="center">🧪 Testing</div>
 
 ```bash
 npm test
@@ -212,7 +210,7 @@ Uses Node.js built-in test runner (`node:test`). Test files live in `tests/` and
 
 ---
 
-## 📦 Deployment
+## <div align="center">📦 Deployment</div>
 
 Cracker AI **requires a persistent Node.js process** due to WebSocket connections. Standard serverless deployments will terminate WebSocket connections.
 
@@ -237,7 +235,7 @@ docker-compose up -d
 
 ---
 
-## 🔧 Troubleshooting
+## <div align="center">🔧 Troubleshooting</div>
 
 **Admin dashboard shows 403**
 Send `POST /api/admin/init`, or manually set `role: "ADMIN"` on your `profiles` document in Firestore.
@@ -255,7 +253,7 @@ Ensure `firebase-admin` v12+ is installed — the server uses modular imports, n
 
 ---
 
-## 🤝 Contributing
+## <div align="center">🤝 Contributing</div>
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/your-feature`
@@ -266,7 +264,7 @@ Please ensure `npm run lint` passes before submitting a PR.
 
 ---
 
-## 📄 License
+## <div align="center">📄 License</div>
 
 This project is licensed under the **MIT License**.
 
