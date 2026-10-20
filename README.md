@@ -20,15 +20,75 @@
 
 Cracker AI is a production-grade SaaS application that provides real-time AI coaching during live job interviews. It combines **streaming speech-to-text**, **large language models**, and **Retrieval-Augmented Generation (RAG)** to instantly surface relevant answers drawn from the user's own resume and documents — all while the interview is happening.
 
-The architecture is built around a **custom Node.js WebSocket server** that acts as a secure relay between the browser and Deepgram's STT API, enabling sub-second transcription without exposing API credentials client-side. An Electron desktop app provides an always-on-top transparent overlay widget for a seamless, invisible-to-interviewer experience.
+The core is built around a **custom Node.js WebSocket server** that acts as a secure relay between the browser and Deepgram's STT API, enabling sub-second transcription without exposing API credentials client-side. An Electron desktop app provides an always-on-top transparent overlay widget for a seamless, invisible-to-interviewer experience.
+
+---
+
+## 🏗️ Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                        CLIENT LAYER                              │
+│                                                                  │
+│   ┌─────────────────────┐        ┌──────────────────────────┐   │
+│   │   Next.js Web App   │        │   Electron Desktop App   │   │
+│   │  (React / Browser)  │        │  (Transparent Overlay)   │   │
+│   └──────────┬──────────┘        └────────────┬─────────────┘   │
+│              │  WebSocket                      │  localhost       │
+└──────────────┼─────────────────────────────────┼─────────────────┘
+               │                                 │
+┌──────────────▼─────────────────────────────────▼─────────────────┐
+│                        SERVER LAYER                               │
+│                                                                   │
+│   ┌────────────────────────────────────────────────────────────┐  │
+│   │              server.js  (Node.js HTTP + WSS)               │  │
+│   │   ┌──────────────────┐     ┌──────────────────────────┐   │  │
+│   │   │  Deepgram Relay  │     │   Next.js Request Handler │   │  │
+│   │   │  (WebSocket WSS) │     │   (App Router API Routes) │   │  │
+│   │   └──────────────────┘     └──────────────────────────┘   │  │
+│   └────────────────────────────────────────────────────────────┘  │
+│                                                                   │
+│   ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌──────────┐  │
+│   │  /api/ai   │  │ /api/docs  │  │/api/billing│  │/api/auth │  │
+│   │  SSE Stream│  │ RAG + Embed│  │  Razorpay  │  │  Clerk   │  │
+│   └────────────┘  └────────────┘  └────────────┘  └──────────┘  │
+└───────────────────────────────────┬───────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼───────────────────────────────┐
+│                        DATA LAYER                                  │
+│                                                                    │
+│   ┌──────────────────────────────────────────────────────────┐    │
+│   │                   Firebase Firestore                      │    │
+│   │   ┌────────────┐  ┌────────────┐  ┌────────────────────┐ │    │
+│   │   │   users    │  │  sessions  │  │     documents      │ │    │
+│   │   │  profiles  │  │  history   │  │ (vector embeddings)│ │    │
+│   │   └────────────┘  └────────────┘  └────────────────────┘ │    │
+│   └──────────────────────────────────────────────────────────┘    │
+│                                                                    │
+│   ┌──────────────┐   ┌──────────────┐   ┌──────────────────┐     │
+│   │  OpenAI API  │   │ Deepgram API │   │   Razorpay API   │     │
+│   │ GPT-4o + Emb │   │ Streaming STT│   │  Payments/Billing│     │
+│   └──────────────┘   └──────────────┘   └──────────────────┘     │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| Custom `server.js` over `next start` | WebSocket upgrade requires access to raw `http.Server` — not possible with Next.js standalone |
+| Firestore Vector Search over Pinecone/Weaviate | Zero extra infrastructure; native `findNearest` on existing collection reduces ops complexity |
+| Provider-agnostic AI layer (`providers.ts`) | Swap LLM providers (OpenAI ↔ Groq) without touching business logic |
+| Clerk + Firebase Auth dual-layer | Clerk handles OAuth UX; Firebase session cookies enable WebSocket authentication |
+| Electron over browser extension | No review cycles or content policy; ships immediately with full system-level access |
 
 ---
 
 ## ✨ Features
 
 ### Core
-- 🎙️ **Real-Time Speech-to-Text** — Persistent WebSocket relay to Deepgram; `interim_results` for sub-second transcription with automatic silence detection
-- 🧠 **AI Answer Generation** — Streams GPT-4o responses via Server-Sent Events (SSE); provider-agnostic via `src/lib/ai/providers.ts` (swap OpenAI / Groq / any OpenAI-compatible endpoint)
+- 🎙️ **Real-Time Speech-to-Text** — Persistent WebSocket relay to Deepgram with `interim_results` for sub-second transcription and automatic silence detection
+- 🧠 **AI Answer Generation** — Streams GPT-4o responses via Server-Sent Events (SSE); provider-agnostic (swap OpenAI / Groq at runtime)
 - 📄 **RAG over Personal Documents** — Uploads parsed via `pdf-parse` / `mammoth`, chunked, embedded via OpenAI `text-embedding-3-small`, stored in Firestore with native `findNearest` vector search
 - 🎭 **Mock Interview Mode** — Full AI-driven mock interviewer with question generation, follow-up logic, and session scoring
 - 🌐 **Real-Time Translation** — On-the-fly question/answer translation via `/api/translate`
@@ -59,58 +119,6 @@ The architecture is built around a **custom Node.js WebSocket server** that acts
 | **WebSocket** | `ws` library | 8.x |
 | **Validation** | Zod | 3.x |
 | **Document Parsing** | `pdf-parse`, `mammoth` (DOCX) | — |
-
----
-
-## 📁 Project Structure
-
-```
-cracker-ai/
-├── server.js                  # Custom HTTP + WebSocket server (entry point)
-├── src/
-│   ├── app/                   # Next.js App Router
-│   │   ├── (auth)/            # Auth layout group (Clerk)
-│   │   ├── admin/             # Admin dashboard (role-gated)
-│   │   ├── api/               # API route handlers
-│   │   │   ├── ai/            # Answer generation (SSE streaming)
-│   │   │   ├── billing/       # Razorpay checkout + webhooks
-│   │   │   ├── documents/     # Upload, embed, retrieve
-│   │   │   ├── mock-interviews/ # Mock session management
-│   │   │   ├── sessions/      # Live session CRUD
-│   │   │   ├── transcription/ # STT fallback (REST)
-│   │   │   ├── translate/     # Real-time translation
-│   │   │   └── usage/         # Credit metering
-│   │   ├── dashboard/         # Main user dashboard
-│   │   ├── billing/           # Subscription UI
-│   │   ├── documents/         # Document manager UI
-│   │   ├── mock-interviews/   # Mock interview UI
-│   │   └── sessions/          # Live session UI
-│   ├── components/
-│   │   ├── live/              # Real-time session components
-│   │   ├── dashboard/         # Dashboard widgets
-│   │   ├── ui/                # Shared design system (Button, Card, etc.)
-│   │   └── layout/            # Nav, Sidebar, Shell
-│   ├── lib/
-│   │   ├── ai/
-│   │   │   ├── providers.ts   # LLM provider abstraction
-│   │   │   ├── answer-generator.ts # RAG + prompt pipeline
-│   │   │   ├── embeddings.ts  # Vector embedding utils
-│   │   │   ├── retriever.ts   # Firestore vector search
-│   │   │   ├── mock-interviewer.ts # Mock interview AI logic
-│   │   │   └── resume-parser.ts    # Resume ingestion
-│   │   ├── firebase/          # Firebase client SDK init
-│   │   ├── firebase-admin.ts  # Firebase Admin SDK (server-only)
-│   │   ├── rate-limit.ts      # Token bucket rate limiter
-│   │   ├── razorpay.ts        # Payment helpers
-│   │   └── usage.ts           # Credit deduction logic
-│   ├── hooks/                 # Custom React hooks
-│   ├── types/                 # Global TypeScript types
-│   └── middleware.ts          # Clerk auth + route protection
-├── desktop/                   # Electron app
-├── tests/                     # Node test runner tests
-├── scripts/                   # Utility/migration scripts
-└── adapters/                  # External service adapters
-```
 
 ---
 
@@ -171,8 +179,6 @@ npm run dev
 ```
 
 > ⚠️ **Do not use `next dev`** — the dev server must be started via `node server.js` (aliased to `npm run dev`) to initialize the WebSocket server for Deepgram relay.
-
-Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
