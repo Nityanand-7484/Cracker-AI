@@ -14,7 +14,7 @@
 
 <br/><br/>
 
-<img src="screenshots/preview.png" alt="Cracker AI Platform Preview" width="100%" />
+<img src="preview.png" alt="Cracker AI Platform Preview" width="100%" />
 
 </div>
 
